@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,8 +28,9 @@ import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.ObjectUtils;
 
-import static java.nio.charset.StandardCharsets.*;
-import static java.time.format.DateTimeFormatter.*;
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME;
 
 /**
  * Represent the Content-Disposition type and parameters as defined in RFC 2183.
@@ -39,7 +40,10 @@ import static java.time.format.DateTimeFormatter.*;
  * @since 5.0
  * @see <a href="https://tools.ietf.org/html/rfc2183">RFC 2183</a>
  */
-public class ContentDisposition {
+public final class ContentDisposition {
+
+	private static final String INVALID_HEADER_FIELD_PARAMETER_FORMAT =
+			"Invalid header field parameter format (as defined in RFC 5987)";
 
 	@Nullable
 	private final String type;
@@ -152,7 +156,7 @@ public class ContentDisposition {
 
 
 	@Override
-	public boolean equals(Object other) {
+	public boolean equals(@Nullable Object other) {
 		if (this == other) {
 			return true;
 		}
@@ -177,9 +181,9 @@ public class ContentDisposition {
 		result = 31 * result + ObjectUtils.nullSafeHashCode(this.filename);
 		result = 31 * result + ObjectUtils.nullSafeHashCode(this.charset);
 		result = 31 * result + ObjectUtils.nullSafeHashCode(this.size);
-		result = 31 * result + (creationDate != null ? creationDate.hashCode() : 0);
-		result = 31 * result + (modificationDate != null ? modificationDate.hashCode() : 0);
-		result = 31 * result + (readDate != null ? readDate.hashCode() : 0);
+		result = 31 * result + (this.creationDate != null ? this.creationDate.hashCode() : 0);
+		result = 31 * result + (this.modificationDate != null ? this.modificationDate.hashCode() : 0);
+		result = 31 * result + (this.readDate != null ? this.readDate.hashCode() : 0);
 		return result;
 	}
 
@@ -198,13 +202,13 @@ public class ContentDisposition {
 			sb.append(this.name).append('\"');
 		}
 		if (this.filename != null) {
-			if(this.charset == null || StandardCharsets.US_ASCII.equals(this.charset)) {
+			if (this.charset == null || StandardCharsets.US_ASCII.equals(this.charset)) {
 				sb.append("; filename=\"");
 				sb.append(this.filename).append('\"');
 			}
 			else {
 				sb.append("; filename*=");
-				sb.append(encodeHeaderFieldParam(this.filename, this.charset));
+				sb.append(encodeFilename(this.filename, this.charset));
 			}
 		}
 		if (this.size != null) {
@@ -270,15 +274,23 @@ public class ContentDisposition {
 				String attribute = part.substring(0, eqIndex);
 				String value = (part.startsWith("\"", eqIndex + 1) && part.endsWith("\"") ?
 						part.substring(eqIndex + 2, part.length() - 1) :
-						part.substring(eqIndex + 1, part.length()));
+						part.substring(eqIndex + 1));
 				if (attribute.equals("name") ) {
 					name = value;
 				}
 				else if (attribute.equals("filename*") ) {
-					filename = decodeHeaderFieldParam(value);
-					charset = Charset.forName(value.substring(0, value.indexOf('\'')));
-					Assert.isTrue(UTF_8.equals(charset) || ISO_8859_1.equals(charset),
-							"Charset should be UTF-8 or ISO-8859-1");
+					int idx1 = value.indexOf('\'');
+					int idx2 = value.indexOf('\'', idx1 + 1);
+					if (idx1 != -1 && idx2 != -1) {
+						charset = Charset.forName(value.substring(0, idx1));
+						Assert.isTrue(UTF_8.equals(charset) || ISO_8859_1.equals(charset),
+								"Charset should be UTF-8 or ISO-8859-1");
+						filename = decodeFilename(value.substring(idx2 + 1), charset);
+					}
+					else {
+						// US ASCII
+						filename = decodeFilename(value, StandardCharsets.US_ASCII);
+					}
 				}
 				else if (attribute.equals("filename") && (filename == null)) {
 					filename = value;
@@ -330,6 +342,7 @@ public class ContentDisposition {
 			do {
 				int nextIndex = index + 1;
 				boolean quoted = false;
+				boolean escaped = false;
 				while (nextIndex < headerValue.length()) {
 					char ch = headerValue.charAt(nextIndex);
 					if (ch == ';') {
@@ -337,9 +350,10 @@ public class ContentDisposition {
 							break;
 						}
 					}
-					else if (ch == '"') {
+					else if (!escaped && ch == '"') {
 						quoted = !quoted;
 					}
+					escaped = (!escaped && ch == '\\');
 					nextIndex++;
 				}
 				String part = headerValue.substring(index + 1, nextIndex).trim();
@@ -354,24 +368,17 @@ public class ContentDisposition {
 	}
 
 	/**
-	 * Decode the given header field param as describe in RFC 5987.
+	 * Decode the given header field param as described in RFC 5987.
 	 * <p>Only the US-ASCII, UTF-8 and ISO-8859-1 charsets are supported.
-	 * @param input the header field param
+	 * @param filename the filename
+	 * @param charset the charset for the filename
 	 * @return the encoded header field param
 	 * @see <a href="https://tools.ietf.org/html/rfc5987">RFC 5987</a>
 	 */
-	private static String decodeHeaderFieldParam(String input) {
-		Assert.notNull(input, "Input String should not be null");
-		int firstQuoteIndex = input.indexOf('\'');
-		int secondQuoteIndex = input.indexOf('\'', firstQuoteIndex + 1);
-		// US_ASCII
-		if (firstQuoteIndex == -1 || secondQuoteIndex == -1) {
-			return input;
-		}
-		Charset charset = Charset.forName(input.substring(0, firstQuoteIndex));
-		Assert.isTrue(UTF_8.equals(charset) || ISO_8859_1.equals(charset),
-				"Charset should be UTF-8 or ISO-8859-1");
-		byte[] value = input.substring(secondQuoteIndex + 1, input.length()).getBytes(charset);
+	private static String decodeFilename(String filename, Charset charset) {
+		Assert.notNull(filename, "'input' String` should not be null");
+		Assert.notNull(charset, "'charset' should not be null");
+		byte[] value = filename.getBytes(charset);
 		ByteArrayOutputStream bos = new ByteArrayOutputStream();
 		int index = 0;
 		while (index < value.length) {
@@ -380,13 +387,18 @@ public class ContentDisposition {
 				bos.write((char) b);
 				index++;
 			}
-			else if (b == '%') {
-				char[] array = { (char)value[index + 1], (char)value[index + 2]};
-				bos.write(Integer.parseInt(String.valueOf(array), 16));
+			else if (b == '%' && index < value.length - 2) {
+				char[] array = new char[]{(char) value[index + 1], (char) value[index + 2]};
+				try {
+					bos.write(Integer.parseInt(String.valueOf(array), 16));
+				}
+				catch (NumberFormatException ex) {
+					throw new IllegalArgumentException(INVALID_HEADER_FIELD_PARAMETER_FORMAT, ex);
+				}
 				index+=3;
 			}
 			else {
-				throw new IllegalArgumentException("Invalid header field parameter format (as defined in RFC 5987)");
+				throw new IllegalArgumentException(INVALID_HEADER_FIELD_PARAMETER_FORMAT);
 			}
 		}
 		return new String(bos.toByteArray(), charset);
@@ -406,7 +418,7 @@ public class ContentDisposition {
 	 * @return the encoded header field param
 	 * @see <a href="https://tools.ietf.org/html/rfc5987">RFC 5987</a>
 	 */
-	private static String encodeHeaderFieldParam(String input, Charset charset) {
+	private static String encodeFilename(String input, Charset charset) {
 		Assert.notNull(input, "Input String should not be null");
 		Assert.notNull(charset, "Charset should not be null");
 		if (StandardCharsets.US_ASCII.equals(charset)) {
@@ -441,12 +453,12 @@ public class ContentDisposition {
 	public interface Builder {
 
 		/**
-		 * Set the value of the {@literal name} parameter
+		 * Set the value of the {@literal name} parameter.
 		 */
 		Builder name(String name);
 
 		/**
-		 * Set the value of the {@literal filename} parameter
+		 * Set the value of the {@literal filename} parameter.
 		 */
 		Builder filename(String filename);
 
@@ -463,7 +475,7 @@ public class ContentDisposition {
 		Builder filename(String filename, Charset charset);
 
 		/**
-		 * Set the value of the {@literal size} parameter
+		 * Set the value of the {@literal size} parameter.
 		 */
 		Builder size(Long size);
 
@@ -483,7 +495,7 @@ public class ContentDisposition {
 		Builder readDate(ZonedDateTime readDate);
 
 		/**
-		 * Build the content disposition
+		 * Build the content disposition.
 		 */
 		ContentDisposition build();
 	}

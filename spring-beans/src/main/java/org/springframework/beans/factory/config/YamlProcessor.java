@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2018 the original author or authors.
+ * Copyright 2002-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -63,27 +63,28 @@ public abstract class YamlProcessor {
 	/**
 	 * A map of document matchers allowing callers to selectively use only
 	 * some of the documents in a YAML resource. In YAML documents are
-	 * separated by <code>---<code> lines, and each document is converted
+	 * separated by {@code ---} lines, and each document is converted
 	 * to properties before the match is made. E.g.
 	 * <pre class="code">
 	 * environment: dev
-	 * url: http://dev.bar.com
+	 * url: https://dev.bar.com
 	 * name: Developer Setup
 	 * ---
 	 * environment: prod
-	 * url:http://foo.bar.com
+	 * url:https://foo.bar.com
 	 * name: My Cool App
 	 * </pre>
 	 * when mapped with
-	 * <code>documentMatchers = YamlProcessor.mapMatcher({"environment": "prod"})</code>
+	 * <pre class="code">
+	 * setDocumentMatchers(properties ->
+	 *     ("prod".equals(properties.getProperty("environment")) ? MatchStatus.FOUND : MatchStatus.NOT_FOUND));
+	 * </pre>
 	 * would end up as
 	 * <pre class="code">
 	 * environment=prod
-	 * url=http://foo.bar.com
+	 * url=https://foo.bar.com
 	 * name=My Cool App
-	 * url=http://dev.bar.com
 	 * </pre>
-	 * @param matchers a map of keys to value patterns (regular expressions)
 	 */
 	public void setDocumentMatchers(DocumentMatcher... matchers) {
 		this.documentMatchers = Arrays.asList(matchers);
@@ -92,8 +93,7 @@ public abstract class YamlProcessor {
 	/**
 	 * Flag indicating that a document for which all the
 	 * {@link #setDocumentMatchers(DocumentMatcher...) document matchers} abstain will
-	 * nevertheless match.
-	 * @param matchDefault the flag to set (default true)
+	 * nevertheless match. Default is {@code true}.
 	 */
 	public void setMatchDefault(boolean matchDefault) {
 		this.matchDefault = matchDefault;
@@ -102,9 +102,7 @@ public abstract class YamlProcessor {
 	/**
 	 * Method to use for resolving resources. Each resource will be converted to a Map,
 	 * so this property is used to decide which map entries to keep in the final output
-	 * from this factory.
-	 * @param resolutionMethod the resolution method to set (defaults to
-	 * {@link ResolutionMethod#OVERRIDE}).
+	 * from this factory. Default is {@link ResolutionMethod#OVERRIDE}.
 	 */
 	public void setResolutionMethod(ResolutionMethod resolutionMethod) {
 		Assert.notNull(resolutionMethod, "ResolutionMethod must not be null");
@@ -158,8 +156,7 @@ public abstract class YamlProcessor {
 			if (logger.isDebugEnabled()) {
 				logger.debug("Loading from YAML: " + resource);
 			}
-			Reader reader = new UnicodeReader(resource.getInputStream());
-			try {
+			try (Reader reader = new UnicodeReader(resource.getInputStream())) {
 				for (Object object : yaml.loadAll(reader)) {
 					if (object != null && process(asMap(object), callback)) {
 						count++;
@@ -172,9 +169,6 @@ public abstract class YamlProcessor {
 					logger.debug("Loaded " + count + " document" + (count > 1 ? "s" : "") +
 							" from YAML resource: " + resource);
 				}
-			}
-			finally {
-				reader.close();
 			}
 		}
 		catch (IOException ex) {
@@ -298,7 +292,8 @@ public abstract class YamlProcessor {
 				Collection<Object> collection = (Collection<Object>) value;
 				if (collection.isEmpty()) {
 					result.put(key, "");
-				} else {
+				}
+				else {
 					int count = 0;
 					for (Object object : collection) {
 						buildFlattenedMap(result, Collections.singletonMap(
@@ -344,7 +339,7 @@ public abstract class YamlProcessor {
 
 
 	/**
-	 * Status returned from {@link DocumentMatcher#matches(java.util.Properties)}
+	 * Status returned from {@link DocumentMatcher#matches(java.util.Properties)}.
 	 */
 	public enum MatchStatus {
 

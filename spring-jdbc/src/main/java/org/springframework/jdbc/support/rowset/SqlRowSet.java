@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,8 +31,8 @@ import org.springframework.jdbc.InvalidResultSetAccessException;
  * {@link java.sql.ResultSet} data.
  *
  * <p>The main difference to the standard JDBC RowSet is that a {@link java.sql.SQLException}
- * is never thrown here. This allows a SqlRowSet to be used without having to deal with
- * checked exceptions. A SqlRowSet will throw Spring's {@link InvalidResultSetAccessException}
+ * is never thrown here. This allows an SqlRowSet to be used without having to deal with
+ * checked exceptions. An SqlRowSet will throw Spring's {@link InvalidResultSetAccessException}
  * instead (when appropriate).
  *
  * <p>Note: This interface extends the {@code java.io.Serializable} marker interface.
@@ -219,8 +219,8 @@ public interface SqlRowSet extends Serializable {
 	 * (for NCHAR, NVARCHAR, LONGNVARCHAR columns).
 	 * @param columnIndex the column index
 	 * @return a String representing the column value
-	 * @see java.sql.ResultSet#getNString(int)
 	 * @since 4.1.3
+	 * @see java.sql.ResultSet#getNString(int)
 	 */
 	String getNString(int columnIndex) throws InvalidResultSetAccessException;
 
@@ -229,8 +229,8 @@ public interface SqlRowSet extends Serializable {
 	 * (for NCHAR, NVARCHAR, LONGNVARCHAR columns).
 	 * @param columnLabel the column label
 	 * @return a String representing the column value
-	 * @see java.sql.ResultSet#getNString(String)
 	 * @since 4.1.3
+	 * @see java.sql.ResultSet#getNString(String)
 	 */
 	String getNString(String columnLabel) throws InvalidResultSetAccessException;
 

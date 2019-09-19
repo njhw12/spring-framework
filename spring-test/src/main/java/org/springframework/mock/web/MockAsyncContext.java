@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,6 +19,7 @@ package org.springframework.mock.web;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
 import javax.servlet.AsyncContext;
 import javax.servlet.AsyncEvent;
 import javax.servlet.AsyncListener;
@@ -94,7 +95,7 @@ public class MockAsyncContext implements AsyncContext {
 	@Override
 	public void dispatch() {
 		dispatch(this.request.getRequestURI());
- 	}
+	}
 
 	@Override
 	public void dispatch(String path) {
@@ -116,7 +117,7 @@ public class MockAsyncContext implements AsyncContext {
 
 	@Override
 	public void complete() {
-		MockHttpServletRequest mockRequest = WebUtils.getNativeRequest(request, MockHttpServletRequest.class);
+		MockHttpServletRequest mockRequest = WebUtils.getNativeRequest(this.request, MockHttpServletRequest.class);
 		if (mockRequest != null) {
 			mockRequest.setAsyncStarted(false);
 		}

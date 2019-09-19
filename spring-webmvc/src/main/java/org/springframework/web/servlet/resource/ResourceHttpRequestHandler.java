@@ -1,11 +1,11 @@
 /*
- * Copyright 2002-2018 the original author or authors.
+ * Copyright 2002-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,9 +21,12 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -149,7 +152,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	 * String-based location values, with support for {@link UrlResource}'s
 	 * (e.g. files or HTTP URLs) with a special prefix to indicate the charset
 	 * to use when appending relative paths. For example
-	 * {@code "[charset=Windows-31J]http://example.org/path"}.
+	 * {@code "[charset=Windows-31J]https://example.org/path"}.
 	 * @since 4.3.13
 	 */
 	public void setLocationValues(List<String> locationValues) {
@@ -182,7 +185,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	}
 
 	/**
-	 * Configure the list of {@link ResourceResolver}s to use.
+	 * Configure the list of {@link ResourceResolver ResourceResolvers} to use.
 	 * <p>By default {@link PathResourceResolver} is configured. If using this property,
 	 * it is recommended to add {@link PathResourceResolver} as the last resolver.
 	 */
@@ -201,7 +204,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	}
 
 	/**
-	 * Configure the list of {@link ResourceTransformer}s to use.
+	 * Configure the list of {@link ResourceTransformer ResourceTransformers} to use.
 	 * <p>By default no transformers are configured for use.
 	 */
 	public void setResourceTransformers(@Nullable List<ResourceTransformer> resourceTransformers) {
@@ -448,7 +451,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 		// For very general mappings (e.g. "/") we need to check 404 first
 		Resource resource = getResource(request);
 		if (resource == null) {
-			logger.trace("No matching resource found - returning 404");
+			logger.debug("Resource not found");
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
@@ -463,7 +466,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 		// Header phase
 		if (new ServletWebRequest(request, response).checkNotModified(resource.lastModified())) {
-			logger.trace("Resource not modified - returning 304");
+			logger.trace("Resource not modified");
 			return;
 		}
 
@@ -472,21 +475,10 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 		// Check the media type for the resource
 		MediaType mediaType = getMediaType(request, resource);
-		if (mediaType != null) {
-			if (logger.isTraceEnabled()) {
-				logger.trace("Determined media type '" + mediaType + "' for " + resource);
-			}
-		}
-		else {
-			if (logger.isTraceEnabled()) {
-				logger.trace("No media type found for " + resource + " - not sending a content-type header");
-			}
-		}
 
 		// Content phase
 		if (METHOD_HEAD.equals(request.getMethod())) {
 			setHeaders(response, resource, mediaType);
-			logger.trace("HEAD request - skipping content");
 			return;
 		}
 
@@ -523,15 +515,9 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 		path = processPath(path);
 		if (!StringUtils.hasText(path) || isInvalidPath(path)) {
-			if (logger.isTraceEnabled()) {
-				logger.trace("Ignoring invalid resource path [" + path + "]");
-			}
 			return null;
 		}
 		if (isInvalidEncodedPath(path)) {
-			if (logger.isTraceEnabled()) {
-				logger.trace("Ignoring invalid resource path with escape sequences [" + path + "]");
-			}
 			return null;
 		}
 
@@ -596,11 +582,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 				if (i == 0 || (i == 1 && slash)) {
 					return path;
 				}
-				path = (slash ? "/" + path.substring(i) : path.substring(i));
-				if (logger.isTraceEnabled()) {
-					logger.trace("Path after trimming leading '/' and control characters: [" + path + "]");
-				}
-				return path;
+				return (slash ? "/" + path.substring(i) : path.substring(i));
 			}
 		}
 		return (slash ? "/" : "");
@@ -624,7 +606,10 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 					return true;
 				}
 			}
-			catch (IllegalArgumentException | UnsupportedEncodingException ex) {
+			catch (IllegalArgumentException ex) {
+				// May not be possible to decode...
+			}
+			catch (UnsupportedEncodingException ex) {
 				// Should never happen...
 			}
 		}
@@ -649,22 +634,25 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	 */
 	protected boolean isInvalidPath(String path) {
 		if (path.contains("WEB-INF") || path.contains("META-INF")) {
-			logger.trace("Path contains \"WEB-INF\" or \"META-INF\".");
+			if (logger.isWarnEnabled()) {
+				logger.warn("Path with \"WEB-INF\" or \"META-INF\": [" + path + "]");
+			}
 			return true;
 		}
 		if (path.contains(":/")) {
 			String relativePath = (path.charAt(0) == '/' ? path.substring(1) : path);
 			if (ResourceUtils.isUrl(relativePath) || relativePath.startsWith("url:")) {
-				logger.trace("Path represents URL or has \"url:\" prefix.");
+				if (logger.isWarnEnabled()) {
+					logger.warn("Path represents URL or has \"url:\" prefix: [" + path + "]");
+				}
 				return true;
 			}
 		}
-		if (path.contains("..")) {
-			path = StringUtils.cleanPath(path);
-			if (path.contains("../")) {
-				logger.trace("Path contains \"../\" after call to StringUtils#cleanPath.");
-				return true;
+		if (path.contains("..") && StringUtils.cleanPath(path).contains("../")) {
+			if (logger.isWarnEnabled()) {
+				logger.warn("Path contains \"../\" after call to StringUtils#cleanPath: [" + path + "]");
 			}
+			return true;
 		}
 		return false;
 	}
@@ -727,7 +715,17 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 	@Override
 	public String toString() {
-		return "ResourceHttpRequestHandler [locations=" + getLocations() + ", resolvers=" + getResourceResolvers() + "]";
+		return "ResourceHttpRequestHandler " + formatLocations();
+	}
+
+	private Object formatLocations() {
+		if (!this.locationValues.isEmpty()) {
+			return this.locationValues.stream().collect(Collectors.joining("\", \"", "[\"", "\"]"));
+		}
+		else if (!this.locations.isEmpty()) {
+			return this.locations;
+		}
+		return Collections.emptyList();
 	}
 
 }
